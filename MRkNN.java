@@ -1,8 +1,6 @@
 package Hadoop.MapReduce;
 
-import java.io.*;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.StringTokenizer;
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -28,13 +26,11 @@ public class MRkNN {
 	public static class IdxMapper extends Mapper<Object, Text, IntWritable, IntWritable>{		
 		private Instances data;
 		private int k = 3;
-		private IntWritable count = new IntWritable(0);
-
+		private IntWritable count = new IntWritable(-1);	
 		
-		
-		private void parse_arff(){
+		private void parse_arff(String fileName){
 			try {
-			BufferedReader reader = new BufferedReader(new FileReader("small.arff")) ; 
+			BufferedReader reader = new BufferedReader(new FileReader(fileName)) ; 
 			ArffReader arff = new ArffReader(reader);
 			data = arff.getData();
 			data.setClassIndex(data.numAttributes() - 1);
@@ -44,6 +40,7 @@ public class MRkNN {
 		}
 			
 		private int calc_dist(String row) {
+			int idx = count.get();
 			String[] atts = row.split(",");
 			float[] dists = new float[k];
 			int[] neighs = new int[k];
@@ -57,7 +54,8 @@ public class MRkNN {
 			
 			for(int i = 0; i < data.numInstances(); i++) {	
 				double distance = 0;
-				for(int j = 0; j < data.numAttributes()-1; j++) {
+				if(i==idx) continue;
+				for(int j = 0; j < data.numAttributes()-1; j++) { 					
 					float diff = Float.parseFloat(atts[j]) - (float) data.instance(i).value(j);
 					distance += diff * diff;
 				}
@@ -65,6 +63,9 @@ public class MRkNN {
 				for(int j = 0; j < k; j++) {
 					if(dists[j] > dists[max_idx]) {
 						max_idx = j;
+					}
+					if(dists[j] < dists[min_idx]) {
+						min_idx = j;
 					}
 				}
 				if(distance < dists[max_idx]) {
@@ -74,9 +75,7 @@ public class MRkNN {
 				}
 			}
 			
-			int max_count = 0;
-			
-			
+			int max_count = 0;			
 			for(int i = 0; i < k; i++) {
 				int count = 0;
 				for(int j = 0; j < k; j++) {
@@ -89,11 +88,12 @@ public class MRkNN {
 					sdc = sdc_arr[i];
 				}
 			}
+
 			return sdc;
 		}
 		
 		public void map(Object key, Text value, Context context) throws IOException, InterruptedException {			
-			parse_arff();
+			parse_arff(context.getConfiguration().get("tr"));			
 			StringTokenizer itr = new StringTokenizer(value.toString());			
 			while (itr.hasMoreTokens()) {				
 				count.set(count.get()+1);
@@ -113,7 +113,7 @@ public class MRkNN {
 
 	public static void main(String[] args) throws Exception {		
 		Configuration conf = new Configuration();
-		//conf.set("tr", args[0]);
+		conf.set("tr", args[2]);
 		FileSystem fs = FileSystem.getLocal(conf);
 		Path output = new Path("output");
 		fs.delete(output, true);
